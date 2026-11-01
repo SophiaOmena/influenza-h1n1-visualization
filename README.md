@@ -1,6 +1,12 @@
 # 🧬 Influenza A (H1N1) - Visualização Estrutural 4D & PyMOL
 
+[![GitHub Pages](https://img.shields.io/badge/Demo%20Live-GitHub%20Pages-pink?style=for-the-badge&logo=github)](https://sophiaomena.github.io/influenza-h1n1-visualization/)
+[![PyMOL](https://img.shields.io/badge/PyMOL-PDB%201RU7-0284c7?style=for-the-badge)](https://www.rcsb.org/structure/1RU7)
+[![License](https://img.shields.io/badge/License-MIT-emerald?style=for-the-badge)](LICENSE)
+
 Repositório científico dedicado à modelagem ultra-estrutural e tetradimensional (4D) do vírion da **Influenza A (subtipo H1N1)**, integrando dados cristalográficos atômicos reais (PDB: `1RU7`) e dinâmica temporal de invasão e fusão de membranas.
+
+👉 **[Acessar Demonstração 4D Interativa Online](https://sophiaomena.github.io/influenza-h1n1-visualization/)**
 
 ![Trímero de Hemaglutinina no PyMOL](pymol/ha_trimer_cartoon.png)
 
