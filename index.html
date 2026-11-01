@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Influenza A (H1N1) - Visualizador 4D em Tempo Real</title>
+  <script src="./three.min.js"></script>
+  <script src="./OrbitControls.js"></script>
+  <script>
+    if (typeof THREE === 'undefined') {
+      document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>');
+      document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"><\/script>');
+    }
+  </script>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: radial-gradient(circle at center, #0f172a 0%, #020617 100%);
+      color: #f8fafc;
+      user-select: none;
+    }
+    #canvas-container {
+      width: 100vw;
+      height: 100vh;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
+    }
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.82);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.55);
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.2rem 0.55rem;
+      border-radius: 9999px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.025em;
+    }
+    .custom-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      background: #334155;
+      outline: none;
+    }
+    .custom-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #38bdf8;
+      cursor: pointer;
+      box-shadow: 0 0 10px #38bdf8;
+    }
+    .time-slider::-webkit-slider-thumb {
+      background: #ec4899;
+      box-shadow: 0 0 12px #ec4899;
+    }
+    .w-slider::-webkit-slider-thumb {
+      background: #a855f7;
+      box-shadow: 0 0 12px #a855f7;
+    }
+    .btn-toggle {
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .btn-toggle.active {
+      background: rgba(56, 189, 248, 0.25);
+      border-color: #38bdf8;
+      color: #38bdf8;
+      font-weight: 600;
+    }
+    .phase-pill {
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .phase-pill.active {
+      background: #ec4899;
+      color: white;
+      font-weight: bold;
+      transform: scale(1.05);
+      box-shadow: 0 0 12px rgba(236, 72, 153, 0.6);
+    }
+  </style>
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <!-- Top-Left Branding & Status -->
+  <div class="fixed top-4 left-4 z-10 glass-panel rounded-2xl p-4 max-w-sm">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center space-x-2">
+        <span class="inline-block w-3 h-3 rounded-full bg-pink-500 animate-pulse"></span>
+        <span class="text-xs uppercase tracking-wider text-pink-400 font-bold">Simulação 4D (Espaço + Tempo)</span>
+      </div>
+      <span class="badge bg-purple-950/80 text-purple-300 border border-purple-700">Dimensão W + T</span>
+    </div>
+    <h1 class="text-xl font-bold text-white mt-1">Vírus Influenza A (H1N1) 4D</h1>
+    <p class="text-xs text-slate-300 mt-1 leading-relaxed">
+      Visualização tetradimensional do vírion: dinâmica conformacional em tempo real, influxo de prótons pelos canais M2, fusão de membrana e liberação dos 8 vRNPs.
+    </p>
+    <div class="mt-3 flex flex-wrap gap-1.5">
+      <span class="badge bg-cyan-950/80 text-cyan-300 border border-cyan-800">Trímero HA (Fusão)</span>
+      <span class="badge bg-fuchsia-950/80 text-fuchsia-300 border border-fuchsia-800">Tetrâmero NA</span>
+      <span class="badge bg-yellow-950/80 text-yellow-300 border border-yellow-800">Prótons H+ (M2)</span>
+      <span class="badge bg-amber-950/80 text-amber-300 border border-amber-800">8 vRNPs (7+1)</span>
+    </div>
+  </div>
+
+  <!-- Top-Right Structural Controls -->
+  <div class="fixed top-4 right-4 z-10 glass-panel rounded-2xl p-4 w-80 max-h-[92vh] overflow-y-auto">
+    <h3 class="text-xs font-bold uppercase tracking-wider text-sky-400 mb-3 flex items-center justify-between">
+      <span>Controles Estruturais</span>
+      <span class="text-[10px] text-slate-400 normal-case font-normal">3D / 4D</span>
+    </h3>
+
+    <!-- 4D Hyper-Slicing (W dimension) -->
+    <div class="mb-4 bg-purple-950/30 border border-purple-900/50 rounded-xl p-2.5">
+      <div class="flex justify-between text-xs text-purple-300 mb-1 font-semibold">
+        <span>Fatia Hiperdimensional (Eixo W)</span>
+        <span id="w-val" class="text-purple-400">0.00 W</span>
+      </div>
+      <input type="range" id="w-slider" min="-100" max="100" value="0" class="custom-slider w-slider">
+      <div class="flex justify-between text-[10px] text-purple-400/80 mt-1">
+        <span>-W (Polo)</span>
+        <span>W = 0 (Equador 4D)</span>
+        <span>+W (Polo)</span>
+      </div>
+    </div>
+
+    <!-- 3D Cutaway Angle -->
+    <div class="mb-4">
+      <div class="flex justify-between text-xs text-slate-300 mb-1 font-medium">
+        <span>Corte Transversal 3D</span>
+        <span id="cut-val" class="text-sky-400 font-semibold">90°</span>
+      </div>
+      <input type="range" id="cut-slider" min="0" max="180" value="90" class="custom-slider">
+    </div>
+
+    <!-- Exploded View -->
+    <div class="mb-4">
+      <div class="flex justify-between text-xs text-slate-300 mb-1 font-medium">
+        <span>Visão Explodida (Camadas)</span>
+        <span id="explode-val" class="text-sky-400 font-semibold">0%</span>
+      </div>
+      <input type="range" id="explode-slider" min="0" max="100" value="0" class="custom-slider">
+    </div>
+
+    <!-- Component Selection -->
+    <div class="mb-3">
+      <div class="text-xs text-slate-300 mb-2 font-medium">Isolar Camada:</div>
+      <div class="grid grid-cols-2 gap-1.5 text-xs">
+        <button id="btn-all" class="btn-toggle active px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-800/80 text-slate-200 text-left">
+          🌟 Vírion 4D
+        </button>
+        <button id="btn-spikes" class="btn-toggle px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-800/80 text-slate-200 text-left">
+          💉 Espículas (HA/NA)
+        </button>
+        <button id="btn-envelope" class="btn-toggle px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-800/80 text-slate-200 text-left">
+          🛡️ Bicamada Lipídica
+        </button>
+        <button id="btn-matrix" class="btn-toggle px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-800/80 text-slate-200 text-left">
+          🧱 Matriz M1
+        </button>
+        <button id="btn-vrnp" class="btn-toggle px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-800/80 text-slate-200 text-left col-span-2">
+          🧬 8 Segmentos vRNP (7 + 1)
+        </button>
+      </div>
+    </div>
+
+    <!-- Thermal Fluctuation toggle -->
+    <div class="flex items-center justify-between pt-2 border-t border-slate-800 text-xs">
+      <span class="text-slate-300">Movimento Browniano</span>
+      <button id="btn-thermal" class="px-2.5 py-1 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-semibold">
+        Ligado (310 K)
+      </button>
+    </div>
+  </div>
+
+  <!-- Bottom 4D Timeline & Timeline Player Bar -->
+  <div class="fixed bottom-4 left-4 right-4 z-10 glass-panel rounded-2xl p-4 max-w-4xl mx-auto">
+    <div class="flex items-center justify-between mb-2">
+      <div class="flex items-center space-x-3">
+        <button id="btn-play-pause" class="w-10 h-10 rounded-full bg-pink-500 hover:bg-pink-400 flex items-center justify-center text-white shadow-lg shadow-pink-500/30 transition-all">
+          <span id="play-icon">⏸️</span>
+        </button>
+        <div>
+          <div class="text-xs font-bold uppercase tracking-wider text-pink-400">Linha do Tempo 4D (Ciclo Viral de Invasão)</div>
+          <div id="phase-name" class="text-sm font-semibold text-white">Fase 0: Vírion Maduro Extracelular</div>
+        </div>
+      </div>
+      <div class="flex items-center space-x-2 text-xs">
+        <span class="text-slate-400">Velocidade:</span>
+        <button class="btn-speed px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700" data-speed="0.25">0.25x</button>
+        <button class="btn-speed active px-2 py-0.5 rounded bg-pink-500/20 text-pink-300 border border-pink-500/50" data-speed="1.0">1.0x</button>
+        <button class="btn-speed px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700" data-speed="2.0">2.0x</button>
+      </div>
+    </div>
+
+    <!-- 4D Time Slider -->
+    <div class="relative w-full my-2">
+      <input type="range" id="time-slider" min="0" max="400" value="0" class="custom-slider time-slider">
+    </div>
+
+    <!-- 5 Phase Jump Pills -->
+    <div class="grid grid-cols-5 gap-1.5 mt-2 text-[11px] text-center">
+      <div class="phase-pill active p-1.5 rounded-lg border border-slate-700 bg-slate-800/70 text-slate-300" data-t="0">
+        0. Maduro (pH 7.4)
+      </div>
+      <div class="phase-pill p-1.5 rounded-lg border border-slate-700 bg-slate-800/70 text-slate-300" data-t="100">
+        1. Acidificação M2
+      </div>
+      <div class="phase-pill p-1.5 rounded-lg border border-slate-700 bg-slate-800/70 text-slate-300" data-t="200">
+        2. Extensão HA (Fusão)
+      </div>
+      <div class="phase-pill p-1.5 rounded-lg border border-slate-700 bg-slate-800/70 text-slate-300" data-t="300">
+        3. Lise de Membrana
+      </div>
+      <div class="phase-pill p-1.5 rounded-lg border border-slate-700 bg-slate-800/70 text-slate-300" data-t="400">
+        4. Liberação vRNP
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- THREE.JS 4D SCENE INITIALIZATION ---
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x040814, 0.0035);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(24, 16, 28);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
+    container.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.minDistance = 6;
+    controls.maxDistance = 85;
+
+    // --- LIGHTING ---
+    const ambientLight = new THREE.AmbientLight(0x1e293b, 1.4);
+    scene.add(ambientLight);
+
+    const mainLight = new THREE.DirectionalLight(0xffffff, 2.2);
+    mainLight.position.set(25, 35, 20);
+    scene.add(mainLight);
+
+    const rimLight = new THREE.DirectionalLight(0x38bdf8, 1.8);
+    rimLight.position.set(-25, -20, -20);
+    scene.add(rimLight);
+
+    const acidLight = new THREE.PointLight(0xf43f5e, 0.0, 40); // Turns on during acidification
+    acidLight.position.set(0, 0, 0);
+    scene.add(acidLight);
+
+    // --- ROOT OBJECTS ---
+    const virusRoot = new THREE.Group();
+    scene.add(virusRoot);
+
+    const spikesGroup = new THREE.Group();
+    const envelopeGroup = new THREE.Group();
+    const matrixGroup = new THREE.Group();
+    const vrnpGroup = new THREE.Group();
+    const protonGroup = new THREE.Group(); // Streaming H+ ions
+
+    virusRoot.add(envelopeGroup);
+    virusRoot.add(matrixGroup);
+    virusRoot.add(vrnpGroup);
+    virusRoot.add(spikesGroup);
+    virusRoot.add(protonGroup);
+
+    // --- MATERIALS ---
+    const lipidMat = new THREE.MeshPhysicalMaterial({
+      color: 0x475569,
+      roughness: 0.4,
+      metalness: 0.1,
+      transmission: 0.25,
+      opacity: 0.95,
+      transparent: true,
+      side: THREE.DoubleSide
+    });
+
+    const m1Mat = new THREE.MeshStandardMaterial({
+      color: 0x2563eb,
+      roughness: 0.35,
+      metalness: 0.2,
+      side: THREE.DoubleSide
+    });
+
+    const haMat = new THREE.MeshStandardMaterial({
+      color: 0x06b6d4,
+      roughness: 0.3,
+      metalness: 0.15
+    });
+
+    const naMat = new THREE.MeshStandardMaterial({
+      color: 0xd946ef,
+      roughness: 0.25,
+      metalness: 0.2
+    });
+
+    const m2Mat = new THREE.MeshStandardMaterial({
+      color: 0xeab308,
+      roughness: 0.2,
+      metalness: 0.5
+    });
+
+    const npMat = new THREE.MeshStandardMaterial({
+      color: 0xf97316,
+      roughness: 0.35,
+      metalness: 0.1
+    });
+
+    const polMat = new THREE.MeshStandardMaterial({
+      color: 0xfacc15,
+      roughness: 0.25,
+      metalness: 0.4
+    });
+
+    // --- 1. MEMBRANE & MATRIX WITH 4D W-SLICING & 3D CUTAWAY ---
+    const R_ENVELOPE = 10.0;
+    const R_MATRIX = 9.2;
+    let envelopeMesh, matrixMesh;
+
+    let curCutRad = Math.PI * 0.5;
+    let curW = 0.0; // 4D coordinate
+
+    function buildEnvelopes(cutAngleRad, wCoord) {
+      if (envelopeMesh) envelopeGroup.remove(envelopeMesh);
+      if (matrixMesh) matrixGroup.remove(matrixMesh);
+
+      // In 4D hypersphere: x^2 + y^2 + z^2 + w^2 = R^2
+      // At slice W, the 3D radius is sqrt(max(0, R^2 - w^2))
+      const effEnvR = Math.sqrt(Math.max(1.0, R_ENVELOPE * R_ENVELOPE - wCoord * wCoord));
+      const effMatR = Math.sqrt(Math.max(0.5, R_MATRIX * R_MATRIX - wCoord * wCoord));
+
+      const phiLength = Math.PI * 2 - cutAngleRad;
+
+      const envGeo = new THREE.SphereGeometry(effEnvR, 48, 48, 0, phiLength, 0, Math.PI);
+      envelopeMesh = new THREE.Mesh(envGeo, lipidMat);
+      envelopeGroup.add(envelopeMesh);
+
+      const matGeo = new THREE.SphereGeometry(effMatR, 48, 48, 0, phiLength, 0, Math.PI);
+      matrixMesh = new THREE.Mesh(matGeo, m1Mat);
+      matrixGroup.add(matrixMesh);
+    }
+
+    buildEnvelopes(curCutRad, curW);
+
+    // --- 2. SURFACE SPIKES (HA, NA, M2) WITH CONFORMATIONAL DYNAMICS ---
+    const SPIKE_COUNT = 340;
+    const spikesData = [];
+
+    // Spike base groups
+    const haProto = new THREE.Group();
+    const haStalkGeo = new THREE.CylinderGeometry(0.2, 0.25, 2.2, 8);
+    const haStalk = new THREE.Mesh(haStalkGeo, haMat);
+    haStalk.position.y = 1.1;
+    haProto.add(haStalk);
+
+    const haHeadsGroup = new THREE.Group();
+    haHeadsGroup.position.y = 2.2;
+    for (let i = 0; i < 3; i++) {
+      const angle = (i * Math.PI * 2) / 3;
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.32, 8, 8), haMat);
+      head.position.set(Math.cos(angle) * 0.35, 0.2, Math.sin(angle) * 0.35);
+      haHeadsGroup.add(head);
+    }
+    haProto.add(haHeadsGroup);
+
+    // NA Proto
+    const naProto = new THREE.Group();
+    const naStalk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 2.0, 8), naMat);
+    naStalk.position.y = 1.0;
+    naProto.add(naStalk);
+    for (let i = 0; i < 4; i++) {
+      const angle = (i * Math.PI * 2) / 4 + Math.PI / 4;
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.45, 0.48), naMat);
+      head.position.set(Math.cos(angle) * 0.4, 2.2, Math.sin(angle) * 0.4);
+      naProto.add(head);
+    }
+
+    // M2 Proto (Proton channel)
+    const m2Proto = new THREE.Group();
+    const m2Pore = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 1.0, 8), m2Mat);
+    m2Pore.position.y = 0.5;
+    m2Proto.add(m2Pore);
+
+    const goldenRatio = (1 + Math.sqrt(5)) / 2;
+    for (let i = 0; i < SPIKE_COUNT; i++) {
+      const theta = 2 * Math.PI * i / goldenRatio;
+      const phi = Math.acos(1 - 2 * (i + 0.5) / SPIKE_COUNT);
+
+      const x = Math.sin(phi) * Math.cos(theta);
+      const y = Math.sin(phi) * Math.sin(theta);
+      const z = Math.cos(phi);
+
+      const normal = new THREE.Vector3(x, y, z);
+      const azimuth = (Math.atan2(y, x) + 2 * Math.PI) % (2 * Math.PI);
+
+      const rand = (i * 17) % 100;
+      let spikeType = 'HA';
+      let spikeInstance;
+
+      if (rand < 78) {
+        spikeType = 'HA';
+        spikeInstance = haProto.clone();
+      } else if (rand < 94) {
+        spikeType = 'NA';
+        spikeInstance = naProto.clone();
+      } else {
+        spikeType = 'M2';
+        spikeInstance = m2Proto.clone();
+      }
+
+      spikeInstance.position.copy(normal).multiplyScalar(R_ENVELOPE);
+      spikeInstance.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+
+      spikesGroup.add(spikeInstance);
+      spikesData.push({
+        mesh: spikeInstance,
+        type: spikeType,
+        normal: normal,
+        azimuth: azimuth,
+        initialPos: spikeInstance.position.clone(),
+        initialScale: new THREE.Vector3(1, 1, 1),
+        randSeed: i * 0.37
+      });
+    }
+
+    // --- 3. 8 vRNP SEGMENTS (ARRANGEMENT "7 + 1" WITH FLEXIBLE 4D KINEMATICS) ---
+    const vrnps = [];
+    const rnpOffsets = [
+      { x: 0, z: 0, len: 12.5, turns: 18, name: "Seg 1 (PB2)" },
+      { x: 2.7, z: 0.0, len: 12.2, turns: 17, name: "Seg 2 (PB1)" },
+      { x: 1.9, z: 2.1, len: 11.8, turns: 16, name: "Seg 3 (PA)" },
+      { x: -0.6, z: 2.7, len: 10.5, turns: 15, name: "Seg 4 (HA)" },
+      { x: -2.6, z: 1.3, len: 9.8, turns: 14, name: "Seg 5 (NP)" },
+      { x: -2.5, z: -1.4, len: 9.2, turns: 13, name: "Seg 6 (NA)" },
+      { x: -0.5, z: -2.7, len: 8.0, turns: 11, name: "Seg 7 (M1/M2)" },
+      { x: 2.0, z: -2.0, len: 6.8, turns: 9, name: "Seg 8 (NS1/NEP)" }
+    ];
+
+    rnpOffsets.forEach((data, idx) => {
+      const rnpSegment = new THREE.Group();
+      const radius = 0.55;
+      const totalPoints = data.turns * 8;
+      const beadGeo = new THREE.SphereGeometry(0.24, 7, 7);
+      const beads = [];
+
+      for (let p = 0; p < totalPoints; p++) {
+        const t = p / totalPoints;
+        const angle = t * data.turns * Math.PI * 2;
+        const bead = new THREE.Mesh(beadGeo, npMat);
+        const y = (t - 0.5) * data.len;
+        const hx = Math.cos(angle) * radius;
+        const hz = Math.sin(angle) * radius;
+        bead.position.set(hx, y, hz);
+        rnpSegment.add(bead);
+        beads.push({ mesh: bead, basePos: bead.position.clone(), t: t });
+      }
+
+      // Polymerase Complex at apex
+      const polMesh = new THREE.Mesh(new THREE.SphereGeometry(0.68, 10, 10), polMat);
+      polMesh.position.set(0, data.len * 0.5 + 0.35, 0);
+      rnpSegment.add(polMesh);
+
+      rnpSegment.position.set(data.x, 0, data.z);
+      vrnpGroup.add(rnpSegment);
+      vrnps.push({
+        group: rnpSegment,
+        initialPos: rnpSegment.position.clone(),
+        initialRot: rnpSegment.rotation.clone(),
+        beads: beads,
+        data: data
+      });
+    });
+
+    // --- 4. PROTONS (H+) FOR ACIDIFICATION PHASE ---
+    const protonCount = 120;
+    const protonGeo = new THREE.SphereGeometry(0.12, 6, 6);
+    const protonMat = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
+    const protons = [];
+
+    for (let p = 0; p < protonCount; p++) {
+      const pm = new THREE.Mesh(protonGeo, protonMat);
+      pm.visible = false;
+      protonGroup.add(pm);
+      protons.push({
+        mesh: pm,
+        targetPos: new THREE.Vector3((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6),
+        originPos: new THREE.Vector3(),
+        speed: 0.5 + Math.random() * 0.8,
+        progress: Math.random()
+      });
+    }
+
+    // --- 4D TIMELINE & DYNAMICS ENGINE ---
+    let timeProgress = 0.0; // 0 to 400 (corresponds to T = 0.0 to 4.0)
+    let isPlaying = true;
+    let playbackSpeed = 1.0;
+    let thermalMotion = true;
+    let explodeVal = 0.0;
+
+    const phaseDescriptions = [
+      "Fase 0: Vírion Maduro Extracelular (pH neutro 7.4, conformação metaestável)",
+      "Fase 1: Endocitose & Acidificação (Canais M2 bombeiam prótons H+ para o interior)",
+      "Fase 2: Transição Conformacional 4D de Hemaglutinina (Extensão do peptídeo de fusão)",
+      "Fase 3: Fusão Membranar & Dissociação do Exoesqueleto M1",
+      "Fase 4: Desnudamento & Migração Direcionada dos 8 vRNPs ao Núcleo"
+    ];
+
+    function update4DState(T) {
+      // T goes from 0.0 to 4.0
+      const currentPhase = Math.min(4, Math.floor(T));
+      document.getElementById('phase-name').innerText = phaseDescriptions[currentPhase];
+
+      // Update Phase Pills
+      document.querySelectorAll('.phase-pill').forEach((pill, idx) => {
+        if (idx === currentPhase) pill.classList.add('active');
+        else pill.classList.remove('active');
+      });
+
+      // --- PHASE DYNAMICS ---
+      // Acid light intensity
+      if (T >= 0.8 && T <= 2.2) {
+        acidLight.intensity = (T < 1.5) ? (T - 0.8) * 3.0 : (2.2 - T) * 3.0;
+      } else {
+        acidLight.intensity = 0.0;
+      }
+
+      // 1. Protons Stream in Phase 1 (T: 0.6 -> 1.8)
+      if (T >= 0.6 && T <= 1.8) {
+        const factor = (T - 0.6) / 1.2;
+        protons.forEach(pr => {
+          pr.mesh.visible = true;
+          pr.progress = (pr.progress + 0.015 * playbackSpeed) % 1.0;
+          // Interpolate from sphere surface toward center
+          pr.mesh.position.lerpVectors(pr.originPos, pr.targetPos, pr.progress);
+        });
+      } else {
+        protons.forEach(pr => pr.mesh.visible = false);
+      }
+
+      // 2. HA Conformational Extension in Phase 2 (T: 1.5 -> 2.5)
+      // The "Spring-loaded" mechanism of Hemagglutinin
+      spikesData.forEach(spike => {
+        if (spike.type === 'HA') {
+          if (T < 1.5) {
+            spike.mesh.scale.set(1, 1, 1);
+          } else if (T <= 2.5) {
+            // Elongate stalk along Y by up to 2.2x
+            const ext = 1.0 + ((T - 1.5) / 1.0) * 1.2;
+            spike.mesh.scale.set(1, ext, 1);
+          } else {
+            spike.mesh.scale.set(1, 2.2, 1);
+          }
+        }
+      });
+
+      // 3. Membrane Lysis & M1 Dissociation in Phase 3 (T: 2.2 -> 3.5)
+      if (T > 2.2) {
+        const dissolve = Math.min(1.0, (T - 2.2) / 1.2);
+        lipidMat.opacity = Math.max(0.15, 0.95 * (1.0 - dissolve * 0.75));
+        m1Mat.opacity = Math.max(0.1, 1.0 - dissolve * 0.85);
+        m1Mat.transparent = true;
+
+        // Matrix fragments disperse slightly outwards
+        const mDisperse = 1.0 + dissolve * 0.45;
+        matrixGroup.scale.set(mDisperse, mDisperse, mDisperse);
+      } else {
+        lipidMat.opacity = 0.95;
+        m1Mat.opacity = 1.0;
+        matrixGroup.scale.set(1, 1, 1);
+      }
+
+      // 4. vRNP Separation & Migration in Phase 4 (T: 2.8 -> 4.0)
+      vrnps.forEach((v, idx) => {
+        if (T < 2.8) {
+          v.group.position.copy(v.initialPos);
+          v.group.rotation.set(0, 0, 0);
+        } else {
+          const uncoat = (T - 2.8) / 1.2;
+          // Segments migrate outwards and uncoil
+          const outDir = new THREE.Vector3(v.data.x, 0, v.data.z).normalize();
+          if (v.data.x === 0 && v.data.z === 0) outDir.set(0, 1, 0);
+
+          const newPos = v.initialPos.clone().add(outDir.multiplyScalar(uncoat * 14.0));
+          newPos.y += Math.sin(uncoat * Math.PI) * 4.0;
+          v.group.position.copy(newPos);
+
+          v.group.rotation.z = uncoat * (idx * 0.3 - 1.2);
+          v.group.rotation.x = uncoat * Math.sin(idx);
+        }
+      });
+    }
+
+    // Initialize M2 proton origins
+    const m2Spikes = spikesData.filter(s => s.type === 'M2');
+    protons.forEach((pr, i) => {
+      const srcSpike = m2Spikes[i % m2Spikes.length];
+      pr.originPos.copy(srcSpike.initialPos);
+    });
+
+    // UI Listeners for Timeline
+    const timeSlider = document.getElementById('time-slider');
+    timeSlider.addEventListener('input', (e) => {
+      timeProgress = parseFloat(e.target.value);
+      update4DState(timeProgress / 100.0);
+    });
+
+    document.querySelectorAll('.phase-pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        const tVal = parseFloat(pill.getAttribute('data-t'));
+        timeProgress = tVal;
+        timeSlider.value = tVal;
+        update4DState(tVal / 100.0);
+      });
+    });
+
+    const btnPlayPause = document.getElementById('btn-play-pause');
+    const playIcon = document.getElementById('play-icon');
+    btnPlayPause.addEventListener('click', () => {
+      isPlaying = !isPlaying;
+      playIcon.innerText = isPlaying ? '⏸️' : '▶️';
+    });
+
+    document.querySelectorAll('.btn-speed').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.btn-speed').forEach(b => b.classList.remove('active', 'bg-pink-500/20', 'text-pink-300', 'border-pink-500/50'));
+        btn.classList.add('active', 'bg-pink-500/20', 'text-pink-300', 'border-pink-500/50');
+        playbackSpeed = parseFloat(btn.getAttribute('data-speed'));
+      });
+    });
+
+    // 4D W-Slider
+    const wSlider = document.getElementById('w-slider');
+    const wVal = document.getElementById('w-val');
+    wSlider.addEventListener('input', (e) => {
+      curW = (parseFloat(e.target.value) / 100.0) * (R_ENVELOPE * 0.85);
+      wVal.innerText = `${curW.toFixed(2)} W`;
+      buildEnvelopes(curCutRad, curW);
+    });
+
+    // 3D Cut Slider
+    const cutSlider = document.getElementById('cut-slider');
+    const cutVal = document.getElementById('cut-val');
+    cutSlider.addEventListener('input', (e) => {
+      const deg = parseInt(e.target.value);
+      curCutRad = (deg * Math.PI) / 180;
+      cutVal.innerText = `${deg}°`;
+      buildEnvelopes(curCutRad, curW);
+
+      const phiLength = Math.PI * 2 - curCutRad;
+      spikesData.forEach(s => {
+        s.mesh.visible = (s.azimuth <= phiLength);
+      });
+    });
+
+    // Exploded View Slider
+    const explodeSlider = document.getElementById('explode-slider');
+    const explodeVal = document.getElementById('explode-val');
+    explodeSlider.addEventListener('input', (e) => {
+      const pct = parseInt(e.target.value);
+      explodeVal.innerText = `${pct}%`;
+      explodeValPct = pct / 100.0;
+
+      const envScale = 1.0 + explodeValPct * 0.7;
+      envelopeGroup.scale.set(envScale, envScale, envScale);
+
+      spikesData.forEach(spike => {
+        const basePos = spike.normal.clone().multiplyScalar(R_ENVELOPE * envScale);
+        const spikeOffset = spike.normal.clone().multiplyScalar(explodeValPct * 4.5);
+        spike.mesh.position.copy(basePos.add(spikeOffset));
+      });
+    });
+
+    // Thermal motion toggle
+    const btnThermal = document.getElementById('btn-thermal');
+    btnThermal.addEventListener('click', () => {
+      thermalMotion = !thermalMotion;
+      btnThermal.innerText = thermalMotion ? 'Ligado (310 K)' : 'Desligado (0 K)';
+      btnThermal.className = thermalMotion
+        ? 'px-2.5 py-1 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-semibold'
+        : 'px-2.5 py-1 rounded-md bg-slate-700/60 text-slate-400 border border-slate-600 font-semibold';
+    });
+
+    // Component Buttons
+    const compButtons = document.querySelectorAll('.btn-toggle');
+    function setCompActive(btn) {
+      compButtons.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    }
+
+    document.getElementById('btn-all').addEventListener('click', (e) => {
+      setCompActive(e.currentTarget);
+      spikesGroup.visible = true; envelopeGroup.visible = true; matrixGroup.visible = true; vrnpGroup.visible = true;
+      const phiLength = Math.PI * 2 - curCutRad;
+      spikesData.forEach(s => s.mesh.visible = (s.azimuth <= phiLength));
+    });
+    document.getElementById('btn-spikes').addEventListener('click', (e) => {
+      setCompActive(e.currentTarget);
+      spikesGroup.visible = true; envelopeGroup.visible = false; matrixGroup.visible = false; vrnpGroup.visible = false;
+      spikesData.forEach(s => s.mesh.visible = true);
+    });
+    document.getElementById('btn-envelope').addEventListener('click', (e) => {
+      setCompActive(e.currentTarget);
+      spikesGroup.visible = false; envelopeGroup.visible = true; matrixGroup.visible = false; vrnpGroup.visible = false;
+    });
+    document.getElementById('btn-matrix').addEventListener('click', (e) => {
+      setCompActive(e.currentTarget);
+      spikesGroup.visible = false; envelopeGroup.visible = false; matrixGroup.visible = true; vrnpGroup.visible = false;
+    });
+    document.getElementById('btn-vrnp').addEventListener('click', (e) => {
+      setCompActive(e.currentTarget);
+      spikesGroup.visible = false; envelopeGroup.visible = false; matrixGroup.visible = false; vrnpGroup.visible = true;
+    });
+
+    // --- MAIN 4D RENDER LOOP ---
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = clock.getDelta();
+      const time = clock.getElapsedTime();
+
+      // Timeline progression
+      if (isPlaying) {
+        timeProgress += delta * 15.0 * playbackSpeed;
+        if (timeProgress > 400.0) timeProgress = 0.0; // Loop 4D cycle
+        timeSlider.value = timeProgress;
+        update4DState(timeProgress / 100.0);
+      }
+
+      // Gentle global rotation
+      virusRoot.rotation.y += delta * 0.15;
+
+      // Realistic Thermal Brownian Fluctuations (at 37°C / 310 K)
+      if (thermalMotion) {
+        spikesData.forEach(s => {
+          const wiggle = Math.sin(time * 3.5 + s.randSeed) * 0.04;
+          s.mesh.rotation.z = wiggle;
+          s.mesh.rotation.x = Math.cos(time * 2.8 + s.randSeed) * 0.04;
+        });
+
+        // Wavy dynamics of vRNP segments
+        vrnps.forEach((v, idx) => {
+          v.beads.forEach(b => {
+            const wave = Math.sin(time * 3.0 + b.t * 8.0 + idx) * 0.08;
+            b.mesh.position.x = b.basePos.x + wave;
+          });
+        });
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    animate();
+
+    // Window resize
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Initial cutaway setup
+    const phiInit = Math.PI * 2 - curCutRad;
+    spikesData.forEach(s => s.mesh.visible = (s.azimuth <= phiInit));
+  </script>
+</body>
+</html>
